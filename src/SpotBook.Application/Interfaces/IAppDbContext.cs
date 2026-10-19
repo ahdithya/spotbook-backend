@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using SpotBook.Domain.Entities;
 
 namespace SpotBook.Application.Interfaces
@@ -15,5 +16,6 @@ namespace SpotBook.Application.Interfaces
         DbSet<Voucher> Vouchers { get; }
         DbSet<PaymentTransaction> PaymentTransactions { get; }
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+        Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
     }
 }
