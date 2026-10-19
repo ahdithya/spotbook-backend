@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SpotBook.Api/SpotBook.Api.csproj" />
+    <Project Path="src/SpotBook.Application/SpotBook.Application.csproj" />
+    <Project Path="src/SpotBook.Domain/SpotBook.Domain.csproj" />
+    <Project Path="src/SpotBook.Infrastructure/SpotBook.Infrastructure.csproj" />
+  </Folder>
+</Solution>
