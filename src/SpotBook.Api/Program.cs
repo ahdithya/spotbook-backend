@@ -8,10 +8,12 @@ using SpotBook.Application.Common.Interfaces;
 using SpotBook.Application.Interfaces;
 using SpotBook.Application.Interfaces.Auth;
 using SpotBook.Application.Interfaces.Bookings;
+using SpotBook.Application.Interfaces.Payments;
 using SpotBook.Application.Interfaces.Spaces;
 using SpotBook.Application.Interfaces.Vouchers;
 using SpotBook.Application.Services.Auth;
 using SpotBook.Application.Services.Bookings;
+using SpotBook.Application.Services.Payments;
 using SpotBook.Application.Services.Spaces;
 using SpotBook.Application.Services.Vouchers;
 using SpotBook.Infrastructure.Persistance;
@@ -34,6 +36,8 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISpaceService, SpaceService>();
 builder.Services.AddScoped<IVoucherService, VoucherService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+
 
 
 
@@ -66,6 +70,8 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 builder.Services.AddControllers();
+builder.Services.AddHttpClient();
+
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "My API", Version = "v1" });

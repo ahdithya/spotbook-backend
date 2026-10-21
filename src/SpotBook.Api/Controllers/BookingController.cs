@@ -37,10 +37,7 @@ namespace SpotBook.Api.Controllers
             {
                 var userId = GetCurrentUserId();
                 var result = await _bookingService.CreateBookingAsync(userId, request);
-                return new BookingResponse
-                {
-                    Id = result.Id
-                };
+                return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
             }
             catch (Exception ex)
             {
