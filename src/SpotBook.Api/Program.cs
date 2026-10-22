@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
+using SpotBook.Api.Middlewares;
 using SpotBook.Application.Common.Interfaces;
 using SpotBook.Application.Interfaces;
 using SpotBook.Application.Interfaces.Auth;
@@ -104,6 +105,8 @@ if (app.Environment.IsDevelopment())
         options.RoutePrefix = "swagger"; // Bisa diakses di http://localhost:5135/swagger
     });
 }
+
+app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 
 app.UseHttpsRedirection();
 
