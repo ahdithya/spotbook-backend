@@ -1,89 +1,57 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SpotBook.Application.Common.Exceptions;
+using SpotBook.Application.Common.Models;
 using SpotBook.Application.DTOs.Request.Space;
 using SpotBook.Application.DTOs.Response.Space;
 using SpotBook.Application.Interfaces.Spaces;
-using SpotBook.Application.Services.Spaces;
-using SpotBook.Domain.Entities;
 
-namespace SpotBook.Api.Controllers
+namespace SpotBook.Api.Controllers;
+
+public class SpaceController(ISpaceService spaceService) : BaseApiController
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    public class SpaceController : ControllerBase
+    private readonly ISpaceService _spaceService = spaceService;
+
+    [HttpGet]
+    public async Task<ActionResult<ApiResponse<IEnumerable<SpaceResponse>>>> GetAll()
     {
-        private readonly ISpaceService _spaceService;
-        public SpaceController(ISpaceService spaceService)
-        {
-            _spaceService = spaceService;
-        }
-
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<SpaceResponse>>> GetAll()
-        {
-            var result = await _spaceService.GetAllActiveSpacesAsync();
-            return Ok(result);
-        }
-
-        [HttpGet("{id:guid}")]
-        public async Task<ActionResult<SpaceResponse>> GetById(Guid id)
-        {
-            var result = await _spaceService.GetSpaceByIdAsync(id);
-            if (result == null)
-            {
-                return NotFound(new { message = "Ruangan tidak ditemukan." });
-            }
-            return Ok(result);
-        }
-
-        [Authorize(Roles = "Admin")]
-        [HttpPost]
-        public async Task<ActionResult<SpaceResponse>> Create([FromBody] CreateSpaceRequest request)
-        {
-            try
-            {
-                var result = await _spaceService.CreateSpaceAsync(request);
-                return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        [Authorize(Roles = "Admin")]
-        [HttpPut("{id:guid}")]
-        public async Task<ActionResult<SpaceResponse>> Update(Guid id, [FromBody] UpdateSpaceRequest request)
-        {
-            try
-            {
-                var result = await _spaceService.UpdateSpaceAsync(id, request);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        [Authorize(Roles = "Admin")]
-        [HttpDelete("{id:guid}")]
-        public async Task<IActionResult> Delete(Guid id)
-        {
-            var success = await _spaceService.DeleteSpaceAsync(id);
-            if (!success)
-            {
-                return NotFound(new { message = "Ruangan tidak ditemukan." });
-            }
-            return NoContent();
-        }
+        var result = await _spaceService.GetAllActiveSpacesAsync();
+        return HandleSuccess(result, "Daftar ruangan berhasil diambil.");
     }
 
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<ApiResponse<SpaceResponse>>> GetById(Guid id)
+    {
+        var result = await _spaceService.GetSpaceByIdAsync(id)
+            ?? throw new NotFoundException("Ruangan tidak ditemukan.");
+        return HandleSuccess(result, "Detail ruangan berhasil diambil.");
+    }
 
+    [Authorize(Roles = "Admin")]
+    [HttpPost]
+    public async Task<ActionResult<ApiResponse<SpaceResponse>>> Create([FromBody] CreateSpaceRequest request)
+    {
+        var result = await _spaceService.CreateSpaceAsync(request);
+        return HandleCreated(nameof(GetById), new { id = result.Id }, result, "Ruangan berhasil ditambahkan.");
+    }
 
+    [Authorize(Roles = "Admin")]
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ApiResponse<SpaceResponse>>> Update(Guid id, [FromBody] UpdateSpaceRequest request)
+    {
+        var result = await _spaceService.UpdateSpaceAsync(id, request);
+        return HandleSuccess(result, "Ruangan berhasil diperbarui.");
+    }
 
+    [Authorize(Roles = "Admin")]
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse<object>>> Delete(Guid id)
+    {
+        var success = await _spaceService.DeleteSpaceAsync(id);
+        if (!success)
+        {
+            throw new NotFoundException("Ruangan tidak ditemukan.");
+        }
+        return HandleSuccess("Ruangan berhasil dinonaktifkan.");
+    }
 }
