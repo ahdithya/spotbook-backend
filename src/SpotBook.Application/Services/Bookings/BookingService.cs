@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using SpotBook.Application.Common.Interfaces;
 using SpotBook.Application.DTOs.Request.Booking;
 using SpotBook.Application.DTOs.Response.Booking;
 using SpotBook.Application.Interfaces;
@@ -12,9 +13,10 @@ using SpotBook.Domain.Enums;
 
 namespace SpotBook.Application.Services.Bookings
 {
-    public class BookingService(IAppDbContext context) : IBookingService
+    public class BookingService(IAppDbContext context, ICacheService cacheService) : IBookingService
     {
         private readonly IAppDbContext _context = context;
+        private readonly ICacheService _cacheService = cacheService;
 
         public async Task<BookingResponse> CreateBookingAsync(Guid userId, CreateBookingRequest request)
         {
@@ -127,6 +129,11 @@ namespace SpotBook.Application.Services.Bookings
                 // 8. Commit Transaksi Database jika semua operasi di atas sukses tanpa error
                 await transaction.CommitAsync();
 
+                if (!string.IsNullOrWhiteSpace(request.VoucherCode))
+                {
+                    await _cacheService.RemoveAsync($"voucher:{request.VoucherCode.ToUpper().Trim()}");
+                }
+
 
                 return new BookingResponse
                 {
@@ -229,6 +236,7 @@ namespace SpotBook.Application.Services.Bookings
             if (booking.Voucher != null && booking.Voucher.UsedCount > 0)
             {
                 booking.Voucher.UsedCount -= 1;
+                await _cacheService.RemoveAsync($"voucher:{booking.Voucher.Code.ToUpper().Trim()}");
             }
             await _context.SaveChangesAsync();
             return true;

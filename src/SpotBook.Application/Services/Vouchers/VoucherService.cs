@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using SpotBook.Application.Common.Interfaces;
 using SpotBook.Application.DTOs.Request.Voucher;
 using SpotBook.Application.DTOs.Response.Voucher;
 using SpotBook.Application.Interfaces;
@@ -15,10 +16,13 @@ namespace SpotBook.Application.Services.Vouchers
     public class VoucherService : IVoucherService
     {
         private readonly IAppDbContext _context;
+        private readonly ICacheService _cacheService;
 
-        public VoucherService(IAppDbContext context)
+
+        public VoucherService(IAppDbContext context, ICacheService cacheService)
         {
             _context = context;
+            _cacheService = cacheService;
         }
 
         public async Task<IEnumerable<VoucherResponse>> GetAllVouchersAsync()
@@ -44,6 +48,8 @@ namespace SpotBook.Application.Services.Vouchers
 
         public async Task<VoucherResponse> CreateVoucherAsync(CreateVoucherRequest request)
         {
+
+
             var exists = await _context.Vouchers
                         .AnyAsync(v => v.Code.ToUpper() == request.Code.ToUpper());
             if (exists)
@@ -73,7 +79,7 @@ namespace SpotBook.Application.Services.Vouchers
             _context.Vouchers.Add(voucher);
             await _context.SaveChangesAsync();
 
-            return new VoucherResponse
+            var response = new VoucherResponse
             {
                 Id = voucher.Id,
                 Code = voucher.Code,
@@ -89,6 +95,10 @@ namespace SpotBook.Application.Services.Vouchers
             };
 
 
+            var cacheKey = $"voucher:{request.Code.ToUpper().Trim()}";
+            await _cacheService.SetAsync(cacheKey, response, TimeSpan.FromMinutes(15));
+            return response;
+
 
         }
 
@@ -98,57 +108,113 @@ namespace SpotBook.Application.Services.Vouchers
             if (voucher == null) return false;
             voucher.IsActive = !voucher.IsActive;
             await _context.SaveChangesAsync();
+
+
+            var cacheKey = $"voucher:{voucher.Code}";
+            await _cacheService.RemoveAsync(cacheKey);
             return true;
         }
-
         public async Task<VoucherDiscountResult> ApplyVoucherAsync(ApplyVoucherRequest request)
         {
-            var voucher = await _context.Vouchers
-                .AsNoTracking()
-                .FirstOrDefaultAsync(v => v.Code.ToUpper() == request.Code.ToUpper().Trim());
-            if (voucher == null || !voucher.IsActive)
+            var codeClean = request.Code.ToUpper().Trim();
+            var cacheKey = $"voucher:{codeClean}";
+
+            // 1. Cek di Redis dulu (manfaatkan data yang sudah kamu set saat CreateVoucher!)
+            var cached = await _cacheService.GetAsync<VoucherResponse>(cacheKey);
+
+            // Variabel untuk kalkulasi
+            bool isActive;
+            DateTime validFrom, validUntil;
+            int usedCount, quota;
+            decimal minOrderAmount, discountValue;
+            decimal? maxDiscountAmount;
+            string discountType;
+            Guid voucherId;
+            string voucherCode;
+
+            if (cached != null)
             {
-                throw new Exception("Kode voucher tidak valid atau tidak aktif.");
+                // AMBIL DARI REDIS (Super cepat < 1ms)
+                voucherId = cached.Id;
+                voucherCode = cached.Code;
+                isActive = cached.IsActive;
+                validFrom = cached.ValidFrom;
+                validUntil = cached.ValidUntil;
+                usedCount = cached.UsedCount;
+                quota = cached.Quota;
+                minOrderAmount = cached.MinOrderAmount;
+                discountType = cached.DiscountType;
+                discountValue = cached.DiscountValue;
+                maxDiscountAmount = cached.MaxDiscountAmount;
             }
-            var now = DateTime.UtcNow;
-            if (now < voucher.ValidFrom || now > voucher.ValidUntil)
+            else
             {
-                throw new Exception("Voucher belum berlaku atau sudah kedaluwarsa.");
-            }
-            if (voucher.UsedCount >= voucher.Quota)
-            {
-                throw new Exception("Kuota voucher sudah habis.");
-            }
-            if (request.OrderAmount < voucher.MinOrderAmount)
-            {
-                throw new Exception($"Minimal transaksi untuk menggunakan voucher ini adalah Rp{voucher.MinOrderAmount:N0}.");
-            }
-            // Kalkulasi Potongan Diskon
-            decimal discountAmount = 0;
-            if (voucher.DiscountType == DiscountType.Percentage)
-            {
-                discountAmount = request.OrderAmount * (voucher.DiscountValue / 100m);
-                // Jika ada batas maksimal potongan diskon persen
-                if (voucher.MaxDiscountAmount.HasValue && discountAmount > voucher.MaxDiscountAmount.Value)
+                // JIKA CACHE MISS, AMBIL DARI POSTGRESQL
+                var dbVoucher = await _context.Vouchers
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(v => v.Code.ToUpper() == codeClean);
+
+                if (dbVoucher == null)
                 {
-                    discountAmount = voucher.MaxDiscountAmount.Value;
+                    throw new Exception("Kode voucher tidak valid.");
                 }
+
+                voucherId = dbVoucher.Id;
+                voucherCode = dbVoucher.Code;
+                isActive = dbVoucher.IsActive;
+                validFrom = dbVoucher.ValidFrom;
+                validUntil = dbVoucher.ValidUntil;
+                usedCount = dbVoucher.UsedCount;
+                quota = dbVoucher.Quota;
+                minOrderAmount = dbVoucher.MinOrderAmount;
+                discountType = dbVoucher.DiscountType.ToString();
+                discountValue = dbVoucher.DiscountValue;
+                maxDiscountAmount = dbVoucher.MaxDiscountAmount;
+
+                // Simpan ke Redis untuk request customer berikutnya
+                var toCache = new VoucherResponse
+                {
+                    Id = dbVoucher.Id,
+                    Code = dbVoucher.Code,
+                    DiscountType = discountType,
+                    DiscountValue = discountValue,
+                    MaxDiscountAmount = maxDiscountAmount,
+                    MinOrderAmount = minOrderAmount,
+                    Quota = quota,
+                    UsedCount = usedCount,
+                    ValidFrom = validFrom,
+                    ValidUntil = validUntil,
+                    IsActive = isActive
+                };
+                await _cacheService.SetAsync(cacheKey, toCache, TimeSpan.FromMinutes(15));
             }
-            else if (voucher.DiscountType == DiscountType.FixedAmount)
+
+            // 2. Lakukan validasi bisnis & hitung potongan harga seperti biasa
+            if (!isActive) throw new Exception("Kode voucher tidak aktif.");
+            var now = DateTime.UtcNow;
+            if (now < validFrom || now > validUntil) throw new Exception("Voucher belum berlaku atau sudah kedaluwarsa.");
+            if (usedCount >= quota) throw new Exception("Kuota voucher sudah habis.");
+            if (request.OrderAmount < minOrderAmount) throw new Exception($"Minimal transaksi adalah Rp{minOrderAmount:N0}.");
+
+            decimal discountAmount = 0;
+            if (discountType == DiscountType.Percentage.ToString())
             {
-                discountAmount = voucher.DiscountValue;
+                discountAmount = request.OrderAmount * (discountValue / 100m);
+                if (maxDiscountAmount.HasValue && discountAmount > maxDiscountAmount.Value)
+                    discountAmount = maxDiscountAmount.Value;
             }
-            // Diskon tidak boleh melebihi nilai total order    
-            if (discountAmount > request.OrderAmount)
+            else
             {
-                discountAmount = request.OrderAmount;
+                discountAmount = discountValue;
             }
+
+            if (discountAmount > request.OrderAmount) discountAmount = request.OrderAmount;
             decimal finalAmount = request.OrderAmount - discountAmount;
 
             return new VoucherDiscountResult
             {
-                VoucherId = voucher.Id,
-                Code = voucher.Code,
+                VoucherId = voucherId,
+                Code = voucherCode,
                 OriginalAmount = request.OrderAmount,
                 DiscountAmount = discountAmount,
                 FinalAmount = finalAmount,
