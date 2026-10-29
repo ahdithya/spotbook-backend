@@ -21,9 +21,9 @@ namespace SpotBook.Application.Services.Bookings
 
         public async Task<BookingResponse> CreateBookingAsync(Guid userId, CreateBookingRequest request)
         {
-            // validasi waktu
-            var startTimeUtc = DateTime.SpecifyKind(request.StartTime, DateTimeKind.Utc);
-            var endTimeUtc = DateTime.SpecifyKind(request.EndTime, DateTimeKind.Utc);
+            // validasi dan normalisasi waktu ke UTC
+            var startTimeUtc = NormalizeToUtc(request.StartTime);
+            var endTimeUtc = NormalizeToUtc(request.EndTime);
 
             if (startTimeUtc <= DateTime.UtcNow)
             {
@@ -261,5 +261,15 @@ namespace SpotBook.Application.Services.Bookings
 
 
 
+
+        private static DateTime NormalizeToUtc(DateTime dt)
+        {
+            return dt.Kind switch
+            {
+                DateTimeKind.Utc => dt,
+                DateTimeKind.Local => dt.ToUniversalTime(),
+                _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc)
+            };
+        }
     }
 }

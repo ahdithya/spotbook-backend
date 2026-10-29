@@ -18,5 +18,7 @@ namespace SpotBook.Application.DTOs.Request.Payment
         public string TransactionStatus { get; set; } = string.Empty;
         [JsonPropertyName("signature_key")]
         public string SignatureKey { get; set; } = string.Empty;
+        [JsonPropertyName("fraud_status")]
+        public string? FraudStatus { get; set; }
     }
 }

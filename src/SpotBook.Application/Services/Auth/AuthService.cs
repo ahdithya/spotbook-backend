@@ -28,7 +28,8 @@ namespace SpotBook.Application.Services.Auth
 
         public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
         {
-            var existingUser = await _context.Users.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower());
+            var cleanEmail = request.Email.Trim().ToLower();
+            var existingUser = await _context.Users.AnyAsync(u => u.Email.ToLower() == cleanEmail);
             if (existingUser)
             {
                 throw new BadRequestException("Email sudah digunakan.");
@@ -37,12 +38,11 @@ namespace SpotBook.Application.Services.Auth
             var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
             var user = new User
             {
-                FullName = request.FullName,
-                Email = request.Email,
-                PhoneNumber = request.PhoneNumber,
+                FullName = request.FullName.Trim(),
+                Email = cleanEmail,
+                PhoneNumber = request.PhoneNumber.Trim(),
                 PasswordHash = passwordHash,
                 Role = UserRole.Customer
-
             };
 
             // Generate Token
@@ -70,7 +70,8 @@ namespace SpotBook.Application.Services.Auth
 
         public async Task<AuthResponse> LoginAsync(LoginRequest request)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower())
+            var cleanEmail = request.Email.Trim().ToLower();
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == cleanEmail)
                 ?? throw new BadRequestException("Email atau password salah.");
 
             bool isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);

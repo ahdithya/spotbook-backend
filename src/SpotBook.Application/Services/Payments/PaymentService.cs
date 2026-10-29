@@ -211,8 +211,23 @@ namespace SpotBook.Application.Services.Payments
                 return true;
             }
             // 4. Update Status Transaksi Berdasarkan Status dari Midtrans
-            if (payload.TransactionStatus.Equals("settlement", StringComparison.OrdinalIgnoreCase) ||
-                payload.TransactionStatus.Equals("capture", StringComparison.OrdinalIgnoreCase))
+            if (payload.TransactionStatus.Equals("capture", StringComparison.OrdinalIgnoreCase))
+            {
+                // Khusus transaksi kartu kredit (capture): pastikan fraud_status adalah "accept"
+                if (!string.IsNullOrWhiteSpace(payload.FraudStatus) &&
+                    !payload.FraudStatus.Equals("accept", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true; // Transaksi berstatus challenge/deny, jangan mark Paid
+                }
+
+                booking.Status = BookingStatus.Paid;
+                if (booking.Payment != null)
+                {
+                    booking.Payment.PaymentStatus = PaymentStatus.Settled;
+                    booking.Payment.PaidAt = DateTime.UtcNow;
+                }
+            }
+            else if (payload.TransactionStatus.Equals("settlement", StringComparison.OrdinalIgnoreCase))
             {
                 booking.Status = BookingStatus.Paid;
                 if (booking.Payment != null)
