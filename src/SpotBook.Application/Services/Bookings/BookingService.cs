@@ -119,6 +119,11 @@ namespace SpotBook.Application.Services.Bookings
 
 
                 decimal totalAmount = basePrice - discountAmount;
+                if (totalAmount <= 0)
+                {
+                    totalAmount = 1m; // Minimal Rp 1 agar valid diproses payment gateway Midtrans
+                    discountAmount = Math.Max(0, basePrice - totalAmount);
+                }
                 string bookingCode = $"SB-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..4].ToUpper()}";
 
                 var booking = new Booking

@@ -3,6 +3,8 @@ using System.Net.Http.Headers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Globalization;
+using SpotBook.Application.Common.Interfaces;
 using System.Text;
 using System.Threading.Tasks;
 using SpotBook.Application.Common.Exceptions;
@@ -19,12 +21,16 @@ using System.Text.Json;
 
 namespace SpotBook.Application.Services.Payments
 {
-    public class PaymentService(IAppDbContext context, IConfiguration configuration, IHttpClientFactory httpClientFactory) : IPaymentService
+    public class PaymentService(
+        IAppDbContext context,
+        IConfiguration configuration,
+        IHttpClientFactory httpClientFactory,
+        ICacheService cacheService) : IPaymentService
     {
         private readonly IAppDbContext _context = context;
         private readonly IConfiguration _configuration = configuration;
         private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
-
+        private readonly ICacheService _cacheService = cacheService;
         public async Task<PaymentInvoiceResponse> CreateInvoiceAsync(Guid userId, CreatePaymentInvoiceRequest request)
         {
             var booking = await _context.Bookings
@@ -45,18 +51,24 @@ namespace SpotBook.Application.Services.Payments
             // Jika sudah pernah dibuatkan invoice sebelumnya dan masih aktif
             if (booking.Payment != null)
             {
-                return new PaymentInvoiceResponse
+                if (booking.Payment.PaymentStatus != PaymentStatus.Expired)
                 {
-                    PaymentTransactionId = booking.Payment.Id,
-                    BookingId = booking.Id,
-                    BookingCode = booking.BookingCode,
-                    Amount = booking.Payment.Amount,
-                    PaymentMethod = booking.Payment.PaymentMethod,
-                    PaymentGatewayRef = booking.Payment.PaymentGatewayRef,
-                    PaymentUrl = booking.Payment.PaymentUrl ?? string.Empty,
-                    Status = booking.Payment.PaymentStatus.ToString(),
-                    CreatedAt = booking.Payment.CreatedAt
-                };
+                    return new PaymentInvoiceResponse
+                    {
+                        PaymentTransactionId = booking.Payment.Id,
+                        BookingId = booking.Id,
+                        BookingCode = booking.BookingCode,
+                        Amount = booking.Payment.Amount,
+                        PaymentMethod = booking.Payment.PaymentMethod,
+                        PaymentGatewayRef = booking.Payment.PaymentGatewayRef,
+                        PaymentUrl = booking.Payment.PaymentUrl ?? string.Empty,
+                        Status = booking.Payment.PaymentStatus.ToString(),
+                        CreatedAt = booking.Payment.CreatedAt
+                    };
+                }
+
+                // Jika invoice sebelumnya sudah Expired, perbarui BookingCode agar Midtrans menerima order_id baru
+                booking.BookingCode = $"SB-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..4].ToUpper()}";
             }
 
             // kirim ke midtrans
@@ -113,31 +125,43 @@ namespace SpotBook.Application.Services.Payments
             var snapToken = jsonDoc.RootElement.GetProperty("token").GetString() ?? string.Empty;
             var redirectUrl = jsonDoc.RootElement.GetProperty("redirect_url").GetString() ?? string.Empty;
 
-            var payment = new PaymentTransaction
+            if (booking.Payment != null)
             {
-                BookingId = booking.Id,
-                PaymentGatewayRef = snapToken,
-                PaymentMethod = request.PaymentMethod,
-                Amount = booking.TotalAmount,
-                PaymentStatus = PaymentStatus.Unpaid,
-                PaymentUrl = redirectUrl,
-                CreatedAt = DateTime.UtcNow
-            };
+                booking.Payment.PaymentGatewayRef = snapToken;
+                booking.Payment.PaymentMethod = request.PaymentMethod;
+                booking.Payment.Amount = booking.TotalAmount;
+                booking.Payment.PaymentStatus = PaymentStatus.Unpaid;
+                booking.Payment.PaymentUrl = redirectUrl;
+                booking.Payment.CreatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                var payment = new PaymentTransaction
+                {
+                    BookingId = booking.Id,
+                    PaymentGatewayRef = snapToken,
+                    PaymentMethod = request.PaymentMethod,
+                    Amount = booking.TotalAmount,
+                    PaymentStatus = PaymentStatus.Unpaid,
+                    PaymentUrl = redirectUrl,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.PaymentTransactions.Add(payment);
+                booking.Payment = payment;
+            }
 
-
-            _context.PaymentTransactions.Add(payment);
             await _context.SaveChangesAsync();
             return new PaymentInvoiceResponse
             {
-                PaymentTransactionId = payment.Id,
+                PaymentTransactionId = booking.Payment.Id,
                 BookingId = booking.Id,
                 BookingCode = booking.BookingCode,
-                Amount = payment.Amount,
-                PaymentMethod = payment.PaymentMethod,
-                PaymentGatewayRef = payment.PaymentGatewayRef,
-                PaymentUrl = payment.PaymentUrl,
-                Status = payment.PaymentStatus.ToString(),
-                CreatedAt = payment.CreatedAt
+                Amount = booking.Payment.Amount,
+                PaymentMethod = booking.Payment.PaymentMethod,
+                PaymentGatewayRef = booking.Payment.PaymentGatewayRef,
+                PaymentUrl = booking.Payment.PaymentUrl ?? string.Empty,
+                Status = booking.Payment.PaymentStatus.ToString(),
+                CreatedAt = booking.Payment.CreatedAt
             };
         }
         public async Task<bool> ProcessWebhookAsync(PaymentWebhookPayload payload)
@@ -160,9 +184,30 @@ namespace SpotBook.Application.Services.Payments
             {
                 throw new NotFoundException($"Booking dengan kode {payload.OrderId} tidak ditemukan.");
             }
-            // 3. Idempotency Check: Jika status sudah Paid, jangan proses berulang kali
+            // 3. Verifikasi Gross Amount dengan TotalAmount Booking
+            if (!decimal.TryParse(payload.GrossAmount, NumberStyles.Any, CultureInfo.InvariantCulture, out var webhookGrossAmount) ||
+                Math.Round(webhookGrossAmount, 2) != Math.Round(booking.TotalAmount, 2))
+            {
+                throw new BadRequestException("Gross amount pada webhook tidak sesuai dengan total tagihan pemesanan.");
+            }
+
+            // 4. Idempotency Check: Jika status sudah Paid, jangan proses berulang kali
             if (booking.Status == BookingStatus.Paid)
             {
+                return true;
+            }
+
+            // 5. Mencegah reaktivasi booking yang sudah dibatalkan manual
+            if (booking.Status == BookingStatus.Cancelled)
+            {
+                if (booking.Payment != null &&
+                    (payload.TransactionStatus.Equals("settlement", StringComparison.OrdinalIgnoreCase) ||
+                     payload.TransactionStatus.Equals("capture", StringComparison.OrdinalIgnoreCase)))
+                {
+                    booking.Payment.PaymentStatus = PaymentStatus.Settled;
+                    booking.Payment.PaidAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
                 return true;
             }
             // 4. Update Status Transaksi Berdasarkan Status dari Midtrans
@@ -191,6 +236,7 @@ namespace SpotBook.Application.Services.Payments
                     if (voucher != null && voucher.UsedCount > 0)
                     {
                         voucher.UsedCount -= 1;
+                        await _cacheService.RemoveAsync($"voucher:{voucher.Code.ToUpper().Trim()}");
                     }
                 }
             }

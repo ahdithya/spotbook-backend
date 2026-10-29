@@ -211,6 +211,11 @@ namespace SpotBook.Application.Services.Vouchers
 
             if (discountAmount > request.OrderAmount) discountAmount = request.OrderAmount;
             decimal finalAmount = request.OrderAmount - discountAmount;
+            if (finalAmount <= 0)
+            {
+                finalAmount = 1m;
+                discountAmount = Math.Max(0, request.OrderAmount - finalAmount);
+            }
 
             return new VoucherDiscountResult
             {

@@ -23,7 +23,8 @@ namespace SpotBook.Infrastructure.services
         }
         public string GenerateAccessToken(User user)
         {
-            var secret = _configuration["JwtSettings:Secret"];
+            var secret = _configuration["JwtSettings:Secret"]
+                ?? throw new InvalidOperationException("JwtSettings:Secret belum dikonfigurasi.");
             var issuer = _configuration["JwtSettings:Issuer"];
             var Audience = _configuration["JwtSettings:Audience"];
             var expiryMinutes = double.Parse(_configuration["JwtSettings:ExpiryMinutes"] ?? "60");
@@ -62,7 +63,8 @@ namespace SpotBook.Infrastructure.services
 
         public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
         {
-            var secret = _configuration["JwtSettings:Secret"];
+            var secret = _configuration["JwtSettings:Secret"]
+                ?? throw new InvalidOperationException("JwtSettings:Secret belum dikonfigurasi.");
 
             var TokenValidationParameters = new TokenValidationParameters
             {
