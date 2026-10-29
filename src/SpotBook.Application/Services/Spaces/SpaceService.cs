@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using SpotBook.Application.Common.Exceptions;
 using SpotBook.Application.Common.Interfaces;
 using SpotBook.Application.DTOs.Request.Space;
 using SpotBook.Application.DTOs.Response.Space;
@@ -108,7 +109,7 @@ namespace SpotBook.Application.Services.Spaces
             var space = await _context.Spaces.FirstOrDefaultAsync(s => s.Id == id);
             if (space == null)
             {
-                throw new Exception("Ruangan tidak ditemukan.");
+                throw new NotFoundException("Ruangan tidak ditemukan.");
             }
 
             space.Name = request.Name;

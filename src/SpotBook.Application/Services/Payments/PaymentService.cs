@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using SpotBook.Application.Common.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using SpotBook.Application.DTOs.Request.Payment;
@@ -33,12 +34,12 @@ namespace SpotBook.Application.Services.Payments
 
             if (booking == null)
             {
-                throw new Exception("Data booking tidak ditemukan");
+                throw new NotFoundException("Data booking tidak ditemukan.");
             }
 
             if (booking.Status != BookingStatus.PendingPayment)
             {
-                throw new Exception("Hanya pemesanan berstatus PendingPayment yang bisa dibuatkan tagihan pembayaran.");
+                throw new BadRequestException("Hanya pemesanan berstatus PendingPayment yang bisa dibuatkan tagihan pembayaran.");
             }
 
             // Jika sudah pernah dibuatkan invoice sebelumnya dan masih aktif
@@ -100,7 +101,7 @@ namespace SpotBook.Application.Services.Payments
             if (!midtransResponse.IsSuccessStatusCode)
             {
                 var errorBody = await midtransResponse.Content.ReadAsStringAsync();
-                throw new Exception($"Gagal menghubungi Midtrans Snap API: {errorBody}");
+                throw new BadRequestException($"Gagal menghubungi Midtrans Snap API: {errorBody}");
             }
 
             var responseBody = await midtransResponse.Content.ReadAsStringAsync();
@@ -157,7 +158,7 @@ namespace SpotBook.Application.Services.Payments
                 .FirstOrDefaultAsync(b => b.BookingCode == payload.OrderId);
             if (booking == null)
             {
-                throw new Exception($"Booking dengan kode {payload.OrderId} tidak ditemukan.");
+                throw new NotFoundException($"Booking dengan kode {payload.OrderId} tidak ditemukan.");
             }
             // 3. Idempotency Check: Jika status sudah Paid, jangan proses berulang kali
             if (booking.Status == BookingStatus.Paid)

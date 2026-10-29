@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using SpotBook.Application.Common.Exceptions;
 using SpotBook.Application.Common.Interfaces;
 using SpotBook.Application.DTOs.Request.Auth;
 using SpotBook.Application.DTOs.Response.Auth;
@@ -30,7 +31,7 @@ namespace SpotBook.Application.Services.Auth
             var existingUser = await _context.Users.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower());
             if (existingUser)
             {
-                throw new Exception("Email sudah digunakan");
+                throw new BadRequestException("Email sudah digunakan.");
             }
             // Create User
             var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
@@ -69,13 +70,13 @@ namespace SpotBook.Application.Services.Auth
 
         public async Task<AuthResponse> LoginAsync(LoginRequest request)
         {
-            var user = await _context.Users.FirstOrDefaultAsync
-                        (u => u.Email.ToLower() == request.Email.ToLower()) ?? throw new Exception("Email atau password salah.");
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower())
+                ?? throw new BadRequestException("Email atau password salah.");
 
             bool isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
             if (!isPasswordValid)
             {
-                throw new Exception("Email atau password salah.");
+                throw new BadRequestException("Email atau password salah.");
             }
 
             var accessToken = _jwtService.GenerateAccessToken(user);
@@ -101,20 +102,20 @@ namespace SpotBook.Application.Services.Auth
             var principal = _jwtService.GetPrincipalFromExpiredToken(request.AccessToken);
             if (principal == null)
             {
-                throw new Exception("Access token tidak valid.");
+                throw new BadRequestException("Access token tidak valid.");
             }
             ;
 
             var email = principal.FindFirst(ClaimTypes.Email)?.Value;
             if (string.IsNullOrEmpty(email))
             {
-                throw new Exception("Token tidak memiliki klaim email.");
+                throw new BadRequestException("Token tidak memiliki klaim email.");
             }
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
             if (user == null || user.RefreshToken != request.RefreshToken || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
             {
-                throw new Exception("Refresh token tidak valid atau sudah kedaluwarsa.");
+                throw new BadRequestException("Refresh token tidak valid atau sudah kedaluwarsa.");
             }
 
             var newAccessToken = _jwtService.GenerateAccessToken(user);

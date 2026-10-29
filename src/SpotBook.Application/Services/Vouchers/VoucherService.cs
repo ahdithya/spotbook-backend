@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using SpotBook.Application.Common.Exceptions;
 using SpotBook.Application.Common.Interfaces;
 using SpotBook.Application.DTOs.Request.Voucher;
 using SpotBook.Application.DTOs.Response.Voucher;
@@ -54,12 +55,12 @@ namespace SpotBook.Application.Services.Vouchers
                         .AnyAsync(v => v.Code.ToUpper() == request.Code.ToUpper());
             if (exists)
             {
-                throw new Exception("Kode voucher sudah digunakan.");
+                throw new BadRequestException("Kode voucher sudah digunakan.");
             }
 
             if (request.ValidUntil <= request.ValidFrom)
             {
-                throw new Exception("Tanggal berakhir harus lebih besar dari tanggal mulai.");
+                throw new BadRequestException("Tanggal berakhir harus lebih besar dari tanggal mulai.");
             }
 
             var voucher = new Voucher
@@ -156,7 +157,7 @@ namespace SpotBook.Application.Services.Vouchers
 
                 if (dbVoucher == null)
                 {
-                    throw new Exception("Kode voucher tidak valid.");
+                    throw new NotFoundException("Kode voucher tidak valid.");
                 }
 
                 voucherId = dbVoucher.Id;
@@ -190,11 +191,11 @@ namespace SpotBook.Application.Services.Vouchers
             }
 
             // 2. Lakukan validasi bisnis & hitung potongan harga seperti biasa
-            if (!isActive) throw new Exception("Kode voucher tidak aktif.");
+            if (!isActive) throw new BadRequestException("Kode voucher tidak aktif.");
             var now = DateTime.UtcNow;
-            if (now < validFrom || now > validUntil) throw new Exception("Voucher belum berlaku atau sudah kedaluwarsa.");
-            if (usedCount >= quota) throw new Exception("Kuota voucher sudah habis.");
-            if (request.OrderAmount < minOrderAmount) throw new Exception($"Minimal transaksi adalah Rp{minOrderAmount:N0}.");
+            if (now < validFrom || now > validUntil) throw new BadRequestException("Voucher belum berlaku atau sudah kedaluwarsa.");
+            if (usedCount >= quota) throw new BadRequestException("Kuota voucher sudah habis.");
+            if (request.OrderAmount < minOrderAmount) throw new BadRequestException($"Minimal transaksi adalah Rp{minOrderAmount:N0}.");
 
             decimal discountAmount = 0;
             if (discountType == DiscountType.Percentage.ToString())

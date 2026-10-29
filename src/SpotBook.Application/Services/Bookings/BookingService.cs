@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using SpotBook.Application.Common.Interfaces;
+using SpotBook.Application.Common.Exceptions;
 using SpotBook.Application.DTOs.Request.Booking;
 using SpotBook.Application.DTOs.Response.Booking;
 using SpotBook.Application.Interfaces;
@@ -26,25 +27,30 @@ namespace SpotBook.Application.Services.Bookings
 
             if (startTimeUtc <= DateTime.UtcNow)
             {
-                throw new Exception("Waktu sewa tidak boleh di masa lalu.");
+                throw new BadRequestException("Waktu sewa tidak boleh di masa lalu.");
             }
             if (endTimeUtc <= startTimeUtc)
             {
-                throw new Exception("Waktu selesai harus lebih besar dari waktu mulai.");
+                throw new BadRequestException("Waktu selesai harus lebih besar dari waktu mulai.");
             }
 
             var duration = (decimal)(endTimeUtc - startTimeUtc).TotalHours;
             if (duration < 1)
             {
-                throw new Exception("Minimal durasi pemesanan adalah 1 jam.");
+                throw new BadRequestException("Minimal durasi pemesanan adalah 1 jam.");
             }
 
             using var transaction = await _context.BeginTransactionAsync();
             try
             {
                 var space = await _context.Spaces
-                             .FirstOrDefaultAsync(s => s.Id == request.SpaceId && s.IsActive) ??
-                              throw new Exception("Ruangan tidak ditemukan atau sedang tidak aktif.");
+                    .FromSqlInterpolated($"SELECT * FROM \"Spaces\" WHERE \"Id\" = {request.SpaceId} FOR UPDATE")
+                    .FirstOrDefaultAsync();
+
+                if (space == null || !space.IsActive)
+                {
+                    throw new NotFoundException("Ruangan tidak ditemukan atau sedang tidak aktif.");
+                }
 
                 // Rumus: StartA < EndB && EndA > StartB
                 // Abaikan booking yang statusnya sudah "Cancelled"
@@ -56,7 +62,7 @@ namespace SpotBook.Application.Services.Bookings
 
                 if (isConflict)
                 {
-                    throw new Exception("Jadwal pada ruangan ini sudah dipesan orang lain. Silakan pilih jam atau ruangan lain.");
+                    throw new BadRequestException("Jadwal pada ruangan ini sudah dipesan orang lain. Silakan pilih jam atau ruangan lain.");
                 }
 
                 // Kalkulasi Harga Dasar(Base Price)
@@ -66,23 +72,28 @@ namespace SpotBook.Application.Services.Bookings
 
                 if (!string.IsNullOrWhiteSpace(request.VoucherCode))
                 {
+                    var cleanCode = request.VoucherCode.ToUpper().Trim();
                     var voucher = await _context.Vouchers
-                                    .FirstOrDefaultAsync(v => v.Code.ToUpper() == request.VoucherCode.ToUpper().Trim()
-                                                        && v.IsActive) ?? throw new Exception("Kode voucher tidak valid.");
+                        .FromSqlInterpolated($"SELECT * FROM \"Vouchers\" WHERE UPPER(\"Code\") = {cleanCode} FOR UPDATE")
+                        .FirstOrDefaultAsync();
+
+                    if (voucher == null || !voucher.IsActive)
+                    {
+                        throw new BadRequestException("Kode voucher tidak valid atau tidak aktif.");
+                    }
                     var now = DateTime.UtcNow;
                     if (now < voucher.ValidFrom || now > voucher.ValidUntil)
                     {
-                        throw new Exception("Voucher belum berlaku atau sudah kedaluwarsa.");
+                        throw new BadRequestException("Voucher belum berlaku atau sudah kedaluwarsa.");
                     }
                     if (voucher.UsedCount >= voucher.Quota)
                     {
-                        throw new Exception("Kuota voucher sudah habis.");
+                        throw new BadRequestException("Kuota voucher sudah habis.");
                     }
                     if (basePrice < voucher.MinOrderAmount)
                     {
-                        throw new Exception($"Minimal transaksi untuk voucher ini adalah Rp{voucher.MinOrderAmount:N0}.");
+                        throw new BadRequestException($"Minimal transaksi untuk voucher ini adalah Rp{voucher.MinOrderAmount:N0}.");
                     }
-
                     if (voucher.DiscountType == DiscountType.Percentage)
                     {
                         discountAmount = basePrice * (voucher.DiscountValue / 100m);
@@ -226,7 +237,7 @@ namespace SpotBook.Application.Services.Bookings
 
             if (booking.Status != BookingStatus.PendingPayment)
             {
-                throw new Exception("Hanya pemesanan yang menunggu pembayaran yang dapat dibatalkan.");
+                throw new BadRequestException("Hanya pemesanan yang menunggu pembayaran yang dapat dibatalkan.");
             }
 
 
