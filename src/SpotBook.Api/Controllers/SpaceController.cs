@@ -19,6 +19,17 @@ public class SpaceController(ISpaceService spaceService) : BaseApiController
         return HandleSuccess(result, "Daftar ruangan berhasil diambil.");
     }
 
+    [HttpGet("available")]
+    public async Task<ActionResult<ApiResponse<IEnumerable<SpaceResponse>>>> GetAvailableSpaces(
+        [FromQuery] DateTime startTime,
+        [FromQuery] DateTime endTime,
+        [FromQuery] int? minCapacity = null,
+        [FromQuery] decimal? maxPrice = null)
+    {
+        var result = await _spaceService.GetAvailableSpacesAsync(startTime, endTime, minCapacity, maxPrice);
+        return HandleSuccess(result, "Daftar ruangan yang tersedia berhasil diambil.");
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ApiResponse<SpaceResponse>>> GetById(Guid id)
     {

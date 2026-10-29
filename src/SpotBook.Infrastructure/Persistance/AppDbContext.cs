@@ -18,6 +18,7 @@ namespace SpotBook.Infrastructure.Persistance
         public DbSet<Booking> Bookings => Set<Booking>();
         public DbSet<Voucher> Vouchers => Set<Voucher>();
         public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
+        public DbSet<ReportJob> ReportJobs => Set<ReportJob>();
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);

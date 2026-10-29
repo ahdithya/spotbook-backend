@@ -147,6 +147,73 @@ namespace SpotBook.Application.Services.Spaces
             await _cacheService.RemoveAsync($"spaces:{id}");
             return true;
         }
+
+        public async Task<IEnumerable<SpaceResponse>> GetAvailableSpacesAsync(
+            DateTime startTime,
+            DateTime endTime,
+            int? minCapacity = null,
+            decimal? maxPrice = null)
+        {
+            var startTimeUtc = NormalizeToUtc(startTime);
+            var endTimeUtc = NormalizeToUtc(endTime);
+
+            if (startTimeUtc <= DateTime.UtcNow)
+            {
+                throw new BadRequestException("Waktu sewa tidak boleh di masa lalu.");
+            }
+
+            if (endTimeUtc <= startTimeUtc)
+            {
+                throw new BadRequestException("Waktu selesai harus lebih besar dari waktu mulai.");
+            }
+
+            var duration = (decimal)(endTimeUtc - startTimeUtc).TotalHours;
+            if (duration < 1)
+            {
+                throw new BadRequestException("Minimal durasi pemesanan adalah 1 jam.");
+            }
+
+            var query = _context.Spaces
+                .AsNoTracking()
+                .Where(s => s.IsActive);
+
+            if (minCapacity.HasValue && minCapacity.Value > 0)
+            {
+                query = query.Where(s => s.Capacity >= minCapacity.Value);
+            }
+
+            if (maxPrice.HasValue && maxPrice.Value > 0)
+            {
+                query = query.Where(s => s.PricePerHour <= maxPrice.Value);
+            }
+
+            query = query.Where(s => !_context.Bookings.Any(b =>
+                b.SpaceId == s.Id &&
+                b.Status != Domain.Enums.BookingStatus.Cancelled &&
+                b.StartTime < endTimeUtc &&
+                b.EndTime > startTimeUtc));
+
+            return await query
+                .OrderBy(s => s.PricePerHour)
+                .Select(s => new SpaceResponse
+                {
+                    Id = s.Id,
+                    Name = s.Name,
+                    Description = s.Description,
+                    Capacity = s.Capacity,
+                    PricePerHour = s.PricePerHour,
+                    IsActive = s.IsActive,
+                    CreatedAt = s.CreatedAt
+                })
+                .ToListAsync();
+        }
+
+        private static DateTime NormalizeToUtc(DateTime dt) => dt.Kind switch
+        {
+            DateTimeKind.Utc => dt,
+            DateTimeKind.Local => dt.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc)
+        };
     }
 
 

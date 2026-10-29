@@ -12,6 +12,8 @@ using SpotBook.Application.Interfaces.Bookings;
 using SpotBook.Application.Interfaces.Payments;
 using SpotBook.Application.Interfaces.Spaces;
 using SpotBook.Application.Interfaces.Vouchers;
+using SpotBook.Application.Interfaces.Reports;
+using SpotBook.Application.Services.Reports;
 using SpotBook.Application.Services.Auth;
 using SpotBook.Application.Services.Bookings;
 using SpotBook.Application.Services.Payments;
@@ -45,7 +47,12 @@ builder.Services.AddScoped<ISpaceService, SpaceService>();
 builder.Services.AddScoped<IVoucherService, VoucherService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddSingleton<IReportProcessingQueue, ReportProcessingQueue>();
+builder.Services.AddScoped<IReportService, ReportService>();
 
+// Hosted background services
+builder.Services.AddHostedService<ReportProcessingBackgroundService>();
+builder.Services.AddHostedService<BookingAutoExpiryBackgroundService>();
 
 
 

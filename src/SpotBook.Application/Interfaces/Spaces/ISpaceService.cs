@@ -14,5 +14,6 @@ namespace SpotBook.Application.Interfaces.Spaces
         Task<SpaceResponse> CreateSpaceAsync(CreateSpaceRequest request);
         Task<SpaceResponse> UpdateSpaceAsync(Guid id, UpdateSpaceRequest request);
         Task<bool> DeleteSpaceAsync(Guid id);
+        Task<IEnumerable<SpaceResponse>> GetAvailableSpacesAsync(DateTime startTime, DateTime endTime, int? minCapacity = null, decimal? maxPrice = null);
     }
 }

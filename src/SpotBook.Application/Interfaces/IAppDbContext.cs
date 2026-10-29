@@ -15,6 +15,7 @@ namespace SpotBook.Application.Interfaces
         DbSet<Booking> Bookings { get; }
         DbSet<Voucher> Vouchers { get; }
         DbSet<PaymentTransaction> PaymentTransactions { get; }
+        DbSet<ReportJob> ReportJobs { get; }
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
         Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
     }
