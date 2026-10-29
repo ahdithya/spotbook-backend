@@ -45,23 +45,23 @@ API akan aktif di:
 
 ---
 
-## 📚 Dokumentasi Proyek Lengkap (`documents/`)
+## 📂 Struktur Repositori
 
-Seluruh dokumentasi teknis, arsitektur, dan panduan domain tersimpan di folder `documents/`:
+```
+SpotBook/
+├── docker-compose.yaml                   # Layanan PostgreSQL 16 & Redis 7
+├── SpotBook.slnx                         # Solution file
+└── src/
+    ├── SpotBook.Domain/                  # Core: Entities & Enums (zero dependency)
+    ├── SpotBook.Application/             # Use cases: Services, DTOs, Interfaces, Exceptions
+    ├── SpotBook.Infrastructure/          # Data access: EF Core (Npgsql), Redis Cache, JWT
+    └── SpotBook.Api/                     # Entry point: Controllers, Middlewares, Program.cs
+```
 
-1. [**Domain Context & Ubiquitous Language (`documents/CONTEXT.md`)**](./documents/CONTEXT.md)  
-   Kamus istilah resmi domain, aturan invarian bisnis, dan diagram status pemesanan.
-2. [**Arsitektur Sistem (`documents/ARCHITECTURE.md`)**](./documents/ARCHITECTURE.md)  
-   Struktur 4-tier Clean Architecture, siklus request, strategi keamanan, dan pola desain.
-3. [**Desain Basis Data (`documents/DATABASE-DESIGN.md`)**](./documents/DATABASE-DESIGN.md)  
-   Diagram Relasi Entitas (ERD), spesifikasi kolom tabel, indeks performa, dan foreign keys.
-4. [**Spesifikasi REST API (`documents/API-SPECIFICATION.md`)**](./documents/API-SPECIFICATION.md)  
-   Kontrak endpoint lengkap (Auth, Spaces, Vouchers, Bookings, Payments), header, dan contoh respons JSON.
-5. [**Architecture Decision Records (`documents/adr/`)**](./documents/adr/README.md)  
-   Catatan keputusan teknis penting:
-   - [ADR-001: Clean Architecture](./documents/adr/ADR-001-clean-architecture.md)
-   - [ADR-002: PostgreSQL Row-Level Locking (`FOR UPDATE`)](./documents/adr/ADR-002-postgresql-pessimistic-locking-for-double-booking.md)
-   - [ADR-003: Redis Distributed Caching](./documents/adr/ADR-003-redis-distributed-cache-aside.md)
-   - [ADR-004: Integrasi Midtrans Snap & Webhook](./documents/adr/ADR-004-midtrans-payment-gateway-integration.md)
-6. [**Panduan Pengembangan & Deployment (`documents/DEVELOPMENT-AND-DEPLOYMENT.md`)**](./documents/DEVELOPMENT-AND-DEPLOYMENT.md)  
-   Prasyarat, konfigurasi environment variables, testing guide, dan panduan deployment produksi.
+## 📌 API Endpoints Ringkas
+
+* **Autentikasi**: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/refresh-token`
+* **Ruangan (Spaces)**: `GET /api/space`, `GET /api/space/{id}`, `POST /api/space` (Admin), `PUT /api/space/{id}` (Admin), `DELETE /api/space/{id}` (Admin)
+* **Voucher Promosi**: `GET /api/vouchers` (Admin), `POST /api/vouchers` (Admin), `POST /api/vouchers/apply`
+* **Pemesanan (Bookings)**: `POST /api/booking`, `GET /api/booking/my-bookings`, `GET /api/booking/{id}`, `POST /api/booking/{id}/cancel`
+* **Pembayaran (Midtrans)**: `POST /api/payment/create-invoice`, `POST /api/payment/webhook`
